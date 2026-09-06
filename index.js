@@ -2349,7 +2349,7 @@ app.post(
       const files = req.files || [];
 
       const MAX_FILES = 10;
-      const MAX_TOTAL_SIZE = 100 * 1024 * 1024; // 100 MB total
+      const MAX_TOTAL_SIZE = 100 * 1024 * 1024;
 
       if (files.length > MAX_FILES) {
         return res.status(400).json({
@@ -2438,6 +2438,10 @@ app.post(
 
       await client.query("BEGIN");
 
+      // ======================================================
+      // CREATE POST
+      // ======================================================
+
       const postResult = await client.query(
         `
         INSERT INTO social_posts
@@ -2455,6 +2459,10 @@ app.post(
       );
 
       const postId = postResult.rows[0].id;
+
+      // ======================================================
+      // SPECIAL ADMIN NOTIFICATIONS
+      // ======================================================
 
       const specialAdminsResult = await client.query(
         `
@@ -2488,6 +2496,10 @@ app.post(
         );
       }
 
+      // ======================================================
+      // SAVE MEDIA
+      // ======================================================
+
       for (let i = 0; i < files.length; i++) {
         const file = files[i];
 
@@ -2500,110 +2512,116 @@ app.post(
         });
 
         // ====================================================
-        // DEFAULT FILE VALUES
+        // ORIGINAL FILE URL
         // ====================================================
 
         let fileUrl = `/uploads/social/${file.filename}`;
+        let databaseFileName = file.originalname;
         let databaseMimeType = file.mimetype;
         let databaseFileSize = file.size;
+
+        // ====================================================
+        // MEDIA TEXT
+        // ====================================================
 
         const mediaText =
           typeof mediaTexts[i] === "string"
             ? mediaTexts[i].trim().slice(0, 5000)
             : "";
 
-        let thumbnailUrl = null;
-
         // ====================================================
-        // VIDEO
+        // VIDEO CONVERSION
+        //
+        // Convert video to:
+        // H.264 video
+        // AAC audio
+        // yuv420p pixel format
+        // faststart for mobile/web
         // ====================================================
 
-        const isVideo =
-          file.mimetype === "video/mp4" || file.mimetype === "video/webm";
+        let videoPathForThumbnail = file.path;
 
-        if (isVideo) {
-          // --------------------------------------------------
-          // CREATE CONVERTED MP4 FILENAME
-          // --------------------------------------------------
-
-          const baseName = path.basename(
-            file.filename,
-            path.extname(file.filename),
-          );
-
-          const convertedFilename = `${baseName}-mobile.mp4`;
+        if (file.mimetype === "video/mp4" || file.mimetype === "video/webm") {
+          const convertedFilename = `${path.parse(file.filename).name}-mobile.mp4`;
 
           const convertedPath = path.join(uploadDir, convertedFilename);
 
-          console.log("VIDEO TRANSCODE START:", {
+          console.log("VIDEO CONVERSION START:", {
             input: file.path,
             output: convertedPath,
           });
 
-          // --------------------------------------------------
-          // FFMPEG VIDEO TRANSCODING
-          // H.264 + AAC + yuv420p + faststart
-          // --------------------------------------------------
-
-          await new Promise((resolve, reject) => {
-            ffmpeg(file.path)
-              .videoCodec("libx264")
-              .audioCodec("aac")
-              .outputOptions(["-pix_fmt yuv420p", "-movflags +faststart"])
-              .on("start", (commandLine) => {
-                console.log("FFMPEG COMMAND:", commandLine);
-              })
-              .on("progress", (progress) => {
-                if (progress.percent != null) {
+          try {
+            await new Promise((resolve, reject) => {
+              ffmpeg(file.path)
+                .videoCodec("libx264")
+                .audioCodec("aac")
+                .outputOptions(["-pix_fmt yuv420p", "-movflags +faststart"])
+                .on("start", (commandLine) => {
+                  console.log("FFMPEG COMMAND:", commandLine);
+                })
+                .on("progress", (progress) => {
                   console.log(
-                    `FFMPEG PROGRESS: ${Math.round(progress.percent)}%`,
+                    `VIDEO CONVERSION: ${Math.round(progress.percent || 0)}%`,
                   );
-                }
-              })
-              .on("end", () => {
-                console.log("VIDEO TRANSCODE COMPLETE:", convertedPath);
+                })
+                .on("end", resolve)
+                .on("error", reject)
+                .save(convertedPath);
+            });
 
-                resolve();
-              })
-              .on("error", (err) => {
-                console.error("VIDEO TRANSCODE ERROR:", err);
+            // Use converted video from this point forward.
+            fileUrl = `/uploads/social/${convertedFilename}`;
+            databaseFileName = convertedFilename;
+            databaseMimeType = "video/mp4";
 
-                reject(err);
-              })
-              .save(convertedPath);
-          });
+            const convertedStat = await fs.promises.stat(convertedPath);
 
-          // --------------------------------------------------
-          // VERIFY CONVERTED VIDEO
-          // --------------------------------------------------
+            databaseFileSize = convertedStat.size;
 
-          const convertedStats = await fs.promises.stat(convertedPath);
+            videoPathForThumbnail = convertedPath;
 
-          databaseFileSize = convertedStats.size;
+            console.log("VIDEO CONVERSION COMPLETE:", {
+              convertedFilename,
+              convertedPath,
+              size: databaseFileSize,
+            });
 
-          // --------------------------------------------------
-          // IMPORTANT:
-          // DATABASE USES CONVERTED VIDEO
-          // --------------------------------------------------
+            // Remove the original uploaded video.
+            try {
+              await fs.promises.unlink(file.path);
 
-          fileUrl = `/uploads/social/${convertedFilename}`;
+              console.log("ORIGINAL VIDEO REMOVED:", file.path);
+            } catch (removeError) {
+              console.warn(
+                "Could not remove original video:",
+                removeError.message,
+              );
+            }
+          } catch (conversionError) {
+            console.error("VIDEO CONVERSION FAILED:", conversionError);
 
-          databaseMimeType = "video/mp4";
+            throw new Error(
+              `Video conversion failed: ${conversionError.message}`,
+            );
+          }
+        }
 
-          console.log("CONVERTED VIDEO READY:", {
-            fileUrl,
-            size: databaseFileSize,
-          });
+        // ====================================================
+        // VIDEO THUMBNAIL
+        // ====================================================
 
-          // --------------------------------------------------
-          // CREATE THUMBNAIL FROM CONVERTED VIDEO
-          // --------------------------------------------------
+        let thumbnailUrl = null;
 
-          const thumbnailFilename = `${convertedFilename}.jpg`;
+        if (
+          databaseMimeType === "video/mp4" ||
+          databaseMimeType === "video/webm"
+        ) {
+          const thumbnailFilename = `${databaseFileName}.jpg`;
 
           try {
             await new Promise((resolve, reject) => {
-              ffmpeg(convertedPath)
+              ffmpeg(videoPathForThumbnail)
                 .screenshots({
                   timestamps: ["10%"],
                   filename: thumbnailFilename,
@@ -2621,18 +2639,6 @@ app.post(
             console.error("Thumbnail generation failed:", err.message);
 
             thumbnailUrl = null;
-          }
-
-          // --------------------------------------------------
-          // DELETE ORIGINAL VIDEO
-          // --------------------------------------------------
-
-          try {
-            await fs.promises.unlink(file.path);
-
-            console.log("ORIGINAL VIDEO DELETED:", file.path);
-          } catch (err) {
-            console.error("Could not delete original video:", err.message);
           }
         }
 
@@ -2658,7 +2664,7 @@ app.post(
           [
             postId,
             fileUrl,
-            file.originalname,
+            databaseFileName,
             databaseMimeType,
             databaseFileSize,
             mediaText,
@@ -2671,8 +2677,13 @@ app.post(
           fileUrl,
           thumbnailUrl,
           mimeType: databaseMimeType,
+          fileSize: databaseFileSize,
         });
       }
+
+      // ======================================================
+      // COMMIT
+      // ======================================================
 
       await client.query("COMMIT");
 
@@ -2708,10 +2719,6 @@ app.post(
       console.error("constraint:", err.constraint);
       console.error("stack:", err.stack);
       console.error("========================================");
-
-      // ======================================================
-      // ERROR RESPONSE
-      // ======================================================
 
       return res.status(500).json({
         success: false,
