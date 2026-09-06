@@ -133,31 +133,40 @@
             class="social-post-image"
             loading="lazy"
           >
-
+ 
      
 <% } else if (
   file.mimeType &&
   file.mimeType.startsWith("video/")
 ) { %>
 
-  <video
-    class="social-post-video"
-    controls
-      controlsList="nodownload noplaybackrate"
-    preload="metadata"
-    playsinline
-    webkit-playsinline
-    <% if (file.thumbnailUrl) { %>
-      poster="<%= file.thumbnailUrl %>"
-    <% } %>
-  >
-    <source
-      src="<%= file.fileUrl %>"
-      type="<%= file.mimeType %>"
-    >
+ <div class="social-post-video-wrapper">
 
-    Your browser does not support video playback.
-  </video>
+    <% if (file.thumbnailUrl) { %>
+      <img
+        src="<%= file.thumbnailUrl %>"
+        alt="Video thumbnail"
+        class="social-post-video-poster"
+      >
+    <% } %>
+
+    <video
+      class="social-post-video"
+      controls
+      controlsList="nodownload noplaybackrate"
+      preload="metadata"
+      playsinline
+      webkit-playsinline
+    >
+      <source
+        src="<%= file.fileUrl %>"
+        type="<%= file.mimeType || 'video/mp4' %>"
+      >
+
+      Your browser does not support video playback.
+    </video>
+
+  </div>
 
 
        
@@ -396,4 +405,4 @@
 <script src="/js/socialpublic.js"></script>
 
 <%- include("partials/footer.ejs") %><!--Remember this include when add a new page-->
-  
+   
