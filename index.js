@@ -5559,12 +5559,7 @@ app.get("/social/exchange", async (req, res) => {
     // ========================================================
     // TOTAL PUBLIC POSTS
     //
-    // ANY POST CAN BE PUBLIC.
-    //
-    // Client posts are allowed here if:
-    // p.public_enabled = TRUE
-    //
-    // There is NO role restriction.
+    // ANY POST WITH public_enabled = TRUE IS PUBLIC.
     // ========================================================
 
     const countResult = await db.query(`
@@ -5590,11 +5585,7 @@ app.get("/social/exchange", async (req, res) => {
     const offset = (currentPage - 1) * limit;
 
     // ========================================================
-    // POSTS
-    //
-    // ANY POST WITH public_enabled = TRUE IS PUBLIC.
-    //
-    // This includes client posts.
+    // PUBLIC POSTS
     // ========================================================
 
     const result = await db.query(
@@ -5711,11 +5702,13 @@ app.get("/social/exchange", async (req, res) => {
           mime_type,
           file_size,
           media_text,
+          thumbnail_url,
           created_at
 
         FROM social_post_media
 
-        WHERE post_id = ANY($1::bigint[])
+        WHERE
+          post_id = ANY($1::bigint[])
 
         ORDER BY
           created_at ASC,
@@ -5738,12 +5731,21 @@ app.get("/social/exchange", async (req, res) => {
 
       mediaByPost[row.post_id].push({
         id: row.id,
+
         postId: row.post_id,
+
         fileUrl: row.file_url,
+
         fileName: row.file_name,
+
         mimeType: row.mime_type,
+
         fileSize: row.file_size,
+
         mediaText: row.media_text,
+
+        thumbnailUrl: row.thumbnail_url,
+
         createdAt: row.created_at,
       });
     }
@@ -5781,7 +5783,7 @@ app.get("/social/exchange", async (req, res) => {
     const pagination = {
       page: currentPage,
 
-      limit: limit,
+      limit,
 
       totalPosts,
 

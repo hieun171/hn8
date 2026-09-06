@@ -140,8 +140,7 @@
   file.mimeType.startsWith("video/")
 ) { %>
 
- <div class="social-post-video-wrapper">
-  <video
+ <video
     class="social-post-video"
     controls
     controlsList="nodownload noplaybackrate"
@@ -154,14 +153,13 @@
   >
     <source
       src="<%= file.fileUrl %>"
-      type="<%= file.mimeType || 'video/mp4' %>"
+      type="<%= file.mimeType %>"
     >
 
     Your browser does not support video playback.
   </video>
-</div>
 
- 
+  
 
        
         <% } else if (

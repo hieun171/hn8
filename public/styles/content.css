@@ -1498,13 +1498,6 @@ button:hover {
    VIDEO — USE VIDEO'S OWN RATIO
    ================================ */
 
-.social-post-video-wrapper {
-  position: relative;
-  width: 100%;
-  max-width: 100%;
-  overflow: hidden;
-}
-
 .social-post-video {
   display: block;
 
@@ -1517,10 +1510,6 @@ button:hover {
 
   object-fit: contain;
 }
-
-/* ================================
-   ONE VIDEO — FULL WIDTH
-   ================================ */
 
 /* ================================
    ONE MEDIA ITEM
