@@ -6202,7 +6202,8 @@ app.get("/public/post/connect", async (req, res) => {
     // ==========================================================
 
     const countResult = await db.query(`
-      SELECT COUNT(*)::INTEGER AS total
+      SELECT
+        COUNT(*)::INTEGER AS total
 
       FROM social_posts p
 
@@ -6213,7 +6214,6 @@ app.get("/public/post/connect", async (req, res) => {
         p.public_enabled = TRUE
         AND p.public_reactions_enabled = TRUE
 
-        -- CLIENT-ROLE POSTS ARE NEVER PUBLIC
         AND COALESCE(LOWER(TRIM(u.role)), '') <> 'client'
     `);
 
@@ -6236,8 +6236,6 @@ app.get("/public/post/connect", async (req, res) => {
     //   public_enabled = TRUE
     //   public_reactions_enabled = TRUE
     //   NOT client-role
-    //
-    // CLIENT-ROLE POSTS CANNOT APPEAR.
     // ==========================================================
 
     const postResult = await db.query(
@@ -6252,6 +6250,7 @@ app.get("/public/post/connect", async (req, res) => {
         p.public_reactions_enabled,
         p.created_at,
         p.updated_at,
+
         u.email
 
       FROM social_posts p
@@ -6263,7 +6262,6 @@ app.get("/public/post/connect", async (req, res) => {
         p.public_enabled = TRUE
         AND p.public_reactions_enabled = TRUE
 
-        -- CLIENT-ROLE POSTS ARE NEVER ALLOWED
         AND COALESCE(LOWER(TRIM(u.role)), '') <> 'client'
 
       ORDER BY
@@ -6357,7 +6355,11 @@ app.get("/public/post/connect", async (req, res) => {
 
     // ==========================================================
     // MEDIA
+    //
     // ONLY LOAD MEDIA FOR CURRENT PAGE POSTS
+    //
+    // IMPORTANT:
+    // thumbnail_url is included for video poster support.
     // ==========================================================
 
     let mediaResult = {
@@ -6375,6 +6377,7 @@ app.get("/public/post/connect", async (req, res) => {
           mime_type,
           file_size,
           media_text,
+          thumbnail_url,
           created_at
 
         FROM social_post_media
@@ -6404,11 +6407,17 @@ app.get("/public/post/connect", async (req, res) => {
       mediaByPost[row.post_id].push({
         id: row.id,
         postId: row.post_id,
+
         fileUrl: row.file_url,
         fileName: row.file_name,
         mimeType: row.mime_type,
         fileSize: row.file_size,
+
         mediaText: row.media_text,
+
+        // IMPORTANT FOR VIDEO POSTER
+        thumbnailUrl: row.thumbnail_url,
+
         createdAt: row.created_at,
       });
     }
@@ -6419,17 +6428,23 @@ app.get("/public/post/connect", async (req, res) => {
 
     const posts = postResult.rows.map((row) => ({
       id: row.id,
+
       userId: row.user_id,
+
       email: row.email,
 
       content: row.content,
+
       color: row.color,
+
       visibility: row.visibility,
 
       publicEnabled: row.public_enabled,
+
       publicReactionsEnabled: row.public_reactions_enabled,
 
       createdAt: row.created_at,
+
       updatedAt: row.updated_at,
 
       media: mediaByPost[row.id] || [],
@@ -6443,12 +6458,15 @@ app.get("/public/post/connect", async (req, res) => {
 
     const pagination = {
       page: currentPage,
+
       limit,
 
       totalPosts,
+
       totalPages,
 
       hasPrevious: currentPage > 1,
+
       hasNext: currentPage < totalPages,
 
       previousPage: currentPage > 1 ? currentPage - 1 : null,
