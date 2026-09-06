@@ -141,33 +141,27 @@
 ) { %>
 
  <div class="social-post-video-wrapper">
-
+  <video
+    class="social-post-video"
+    controls
+    controlsList="nodownload noplaybackrate"
+    preload="metadata"
+    playsinline
+    webkit-playsinline
     <% if (file.thumbnailUrl) { %>
-      <img
-        src="<%= file.thumbnailUrl %>"
-        alt="Video thumbnail"
-        class="social-post-video-poster"
-      >
+      poster="<%= file.thumbnailUrl %>"
     <% } %>
-
-    <video
-      class="social-post-video"
-      controls
-      controlsList="nodownload noplaybackrate"
-      preload="metadata"
-      playsinline
-      webkit-playsinline
+  >
+    <source
+      src="<%= file.fileUrl %>"
+      type="<%= file.mimeType || 'video/mp4' %>"
     >
-      <source
-        src="<%= file.fileUrl %>"
-        type="<%= file.mimeType || 'video/mp4' %>"
-      >
 
-      Your browser does not support video playback.
-    </video>
+    Your browser does not support video playback.
+  </video>
+</div>
 
-  </div>
-
+ 
 
        
         <% } else if (
@@ -212,8 +206,6 @@
   </div>
 
 <% } %>
-
-
 
           <!-- ====================================================
                POST REACTIONS
@@ -292,8 +284,7 @@
   <span>
     🏆 <strong><%= post.reactions.trophy %></strong>
   </span>
-<% } %>
- 
+<% } %> 
 
               <% if (post.reactions.victory > 0) { %>
                 <span>
