@@ -18,9 +18,11 @@ function socialPublicSetPostImageRatio(post) {
     mediaContainer.querySelectorAll(".social-post-image"),
   );
 
+  // One image or no images:
+  // remove the average ratio because it is only needed
+  // when multiple images are present.
   if (images.length <= 1) {
     mediaContainer.style.removeProperty("--social-average-image-ratio");
-
     return;
   }
 
@@ -42,7 +44,14 @@ function socialPublicSetPostImageRatio(post) {
 }
 
 // ============================================================
-// VIDEO THUMBNAIL / PLAY INITIALIZATION
+// VIDEO INITIALIZATION
+//
+// Videos use the native HTML <video poster="...">.
+//
+// NO separate thumbnail <img>
+// NO thumbnail click handler
+// NO image ratio
+// NO forced video aspect ratio
 // ============================================================
 
 function socialPublicInitializeVideos(post) {
@@ -50,58 +59,50 @@ function socialPublicInitializeVideos(post) {
     return;
   }
 
-  const wrappers = post.querySelectorAll(".social-post-video-wrapper");
+  const videos = post.querySelectorAll(".social-post-video");
 
-  wrappers.forEach((wrapper) => {
-    const video = wrapper.querySelector(".social-post-video");
+  videos.forEach((video) => {
+    // ----------------------------------------------------------
+    // Prevent duplicate initialization
+    // ----------------------------------------------------------
 
-    const poster = wrapper.querySelector(".social-post-video-poster");
-
-    if (!video) {
-      return;
-    }
-
-    // Prevent duplicate event listeners
     if (video.dataset.socialVideoInitialized === "true") {
       return;
     }
 
     video.dataset.socialVideoInitialized = "true";
 
-    // ----------------------------------------------------------
-    // Thumbnail click → play video
-    // ----------------------------------------------------------
-
-    if (poster) {
-      poster.addEventListener("click", () => {
-        video.play().catch((error) => {
-          console.error("SOCIAL VIDEO PLAY ERROR:", error);
-        });
-      });
-    }
+    const wrapper = video.closest(".social-post-video-wrapper");
 
     // ----------------------------------------------------------
-    // Video started → hide thumbnail
+    // Video started
     // ----------------------------------------------------------
 
     video.addEventListener("play", () => {
-      wrapper.classList.add("is-playing");
+      if (wrapper) {
+        wrapper.classList.add("is-playing");
+      }
     });
 
     // ----------------------------------------------------------
-    // Video ended → show thumbnail again
+    // Video ended
     // ----------------------------------------------------------
 
     video.addEventListener("ended", () => {
-      wrapper.classList.remove("is-playing");
+      if (wrapper) {
+        wrapper.classList.remove("is-playing");
+      }
     });
 
     // ----------------------------------------------------------
-    // Video reset to beginning → show thumbnail
+    // Video paused at the very beginning
+    //
+    // This is optional, but keeps the wrapper state clean
+    // if the user pauses before playback has actually started.
     // ----------------------------------------------------------
 
     video.addEventListener("pause", () => {
-      if (video.currentTime === 0) {
+      if (video.currentTime === 0 && wrapper) {
         wrapper.classList.remove("is-playing");
       }
     });
@@ -117,33 +118,42 @@ function socialPublicInitializePost(post) {
     return;
   }
 
-  // ----------------------------------------------------------
+  // ============================================================
   // IMAGES
-  // ----------------------------------------------------------
+  // ============================================================
 
   const images = post.querySelectorAll(".social-post-image");
 
   if (images.length) {
     images.forEach((image) => {
+      // --------------------------------------------------------
+      // Image already loaded
+      // --------------------------------------------------------
+
       if (image.complete) {
         socialPublicSetPostImageRatio(post);
-      } else {
-        image.addEventListener(
-          "load",
-          () => {
-            socialPublicSetPostImageRatio(post);
-          },
-          {
-            once: true,
-          },
-        );
+        return;
       }
+
+      // --------------------------------------------------------
+      // Image still loading
+      // --------------------------------------------------------
+
+      image.addEventListener(
+        "load",
+        () => {
+          socialPublicSetPostImageRatio(post);
+        },
+        {
+          once: true,
+        },
+      );
     });
   }
 
-  // ----------------------------------------------------------
+  // ============================================================
   // VIDEOS
-  // ----------------------------------------------------------
+  // ============================================================
 
   socialPublicInitializeVideos(post);
 }
