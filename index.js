@@ -1574,12 +1574,6 @@ app.get("/social/post", ensureAuthenticated, async (req, res) => {
 
     const postId = req.query.postId ? parseInt(req.query.postId, 10) : null;
 
-    console.log("========================================");
-    console.log("SOCIAL GET");
-    console.log("userId:", userId);
-    console.log("userEmail:", userEmail);
-    console.log("postId:", postId);
-
     if (req.query.postId && !Number.isInteger(postId)) {
       return res.status(400).send("Invalid post ID.");
     }
@@ -1615,14 +1609,6 @@ app.get("/social/post", ensureAuthenticated, async (req, res) => {
     const isAdmin = isAdmin1 || isAdmin2;
 
     const emailsAdmin = normalizedRole === "admin";
-
-    console.log("SOCIAL userRole:", JSON.stringify(userRole));
-    console.log("SOCIAL userGroupId:", JSON.stringify(userGroupId));
-    console.log("SOCIAL isClient:", isClient);
-    console.log("SOCIAL isAdmin1:", isAdmin1);
-    console.log("SOCIAL isAdmin2:", isAdmin2);
-    console.log("SOCIAL isAdmin:", isAdmin);
-    console.log("SOCIAL emailsAdmin:", emailsAdmin);
 
     // ========================================================
     // PAGINATION
@@ -1884,7 +1870,6 @@ app.get("/social/post", ensureAuthenticated, async (req, res) => {
         [postId, userId, isAdmin, emailsAdmin, userGroupId, isClient],
       );
 
-      console.log("SINGLE POST RESULT:", postsResult.rows);
       //
       if (!postsResult.rowCount) {
         return res.status(404).send("Post not found.");
@@ -2129,8 +2114,6 @@ app.get("/social/post", ensureAuthenticated, async (req, res) => {
         created_at ASC,
         id ASC
     `);
-
-    console.log("SOCIAL MEDIA COUNT:", mediaResult.rows.length);
 
     // ========================================================
     // MEDIA LOOKUP
@@ -2787,14 +2770,6 @@ app.post(
       for (let i = 0; i < files.length; i++) {
         const file = files[i];
 
-        console.log("SAVING FILE:", {
-          filename: file.filename,
-          originalname: file.originalname,
-          mimetype: file.mimetype,
-          size: file.size,
-          path: file.path,
-        });
-
         // ====================================================
         // ORIGINAL FILE URL
         // ====================================================
@@ -2830,11 +2805,6 @@ app.post(
 
           const convertedPath = path.join(uploadDir, convertedFilename);
 
-          console.log("VIDEO CONVERSION START:", {
-            input: file.path,
-            output: convertedPath,
-          });
-
           try {
             await new Promise((resolve, reject) => {
               ffmpeg(file.path)
@@ -2865,17 +2835,9 @@ app.post(
 
             videoPathForThumbnail = convertedPath;
 
-            console.log("VIDEO CONVERSION COMPLETE:", {
-              convertedFilename,
-              convertedPath,
-              size: databaseFileSize,
-            });
-
             // Remove the original uploaded video.
             try {
               await fs.promises.unlink(file.path);
-
-              console.log("ORIGINAL VIDEO REMOVED:", file.path);
             } catch (removeError) {
               console.warn(
                 "Could not remove original video:",
@@ -2917,8 +2879,6 @@ app.post(
             });
 
             thumbnailUrl = `/uploads/social/thumbnails/${thumbnailFilename}`;
-
-            console.log("VIDEO THUMBNAIL CREATED:", thumbnailUrl);
           } catch (err) {
             console.error("Thumbnail generation failed:", err.message);
 
@@ -2955,14 +2915,6 @@ app.post(
             thumbnailUrl,
           ],
         );
-
-        console.log("MEDIA SAVED:", {
-          postId,
-          fileUrl,
-          thumbnailUrl,
-          mimeType: databaseMimeType,
-          fileSize: databaseFileSize,
-        });
       }
 
       // ======================================================
@@ -3689,8 +3641,6 @@ app.post("/social/comment/edit", ensureAuthenticated, async (req, res) => {
       [parsedCommentId],
     );
 
-    console.log("COMMENT LOOKUP:", commentResult.rows);
-
     if (!commentResult.rowCount) {
       return res.status(404).send("Comment not found.");
     }
@@ -3751,8 +3701,6 @@ app.post("/social/comment/edit", ensureAuthenticated, async (req, res) => {
       [content, parsedCommentId, userId],
     );
 
-    console.log("COMMENT UPDATED:", updateResult.rows);
-
     if (!updateResult.rowCount) {
       return res.status(403).send("You cannot edit this comment.");
     }
@@ -3760,8 +3708,6 @@ app.post("/social/comment/edit", ensureAuthenticated, async (req, res) => {
     // ----------------------------------------------------------
     // REDIRECT
     // ----------------------------------------------------------
-
-    console.log("REDIRECT:", `/social/post?postId=${postId}`);
 
     return res.redirect(
       `/social/post?postId=${encodeURIComponent(String(postId))}`,
@@ -4454,8 +4400,6 @@ app.post("/social/reply/edit", ensureAuthenticated, async (req, res) => {
       `,
       [content, parsedReplyId, userId],
     );
-
-    console.log("EDIT RESULT:", result.rows);
 
     if (!result.rowCount) {
       return res.status(403).send("You cannot edit this reply.");
