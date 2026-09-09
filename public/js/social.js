@@ -172,6 +172,10 @@ document.addEventListener("click", async (event) => {
     button.disabled = false;
   }
 });
+//
+// ============================================================
+// SOCIAL POST CREATE
+// ============================================================
 
 const socialPostCreateComposer = document.getElementById(
   "socialPostCreateComposer",
@@ -187,12 +191,57 @@ const socialPostFilesPreview = document.getElementById(
   "socialPostFilesPreview",
 );
 
+// ============================================================
+// FORM SOCIAL POST CREATE
+// ============================================================
+
 const socialPostCreateForm = document.getElementById("socialCreatePostForm");
+
+// ============================================================
+// CLIENT-ONLY VISIBILITY SELECTOR
+// ============================================================
+
+const socialVisibilityClientOnly = document.getElementById(
+  "socialVisibilityClientOnly",
+);
+
+const socialClientSelector = document.getElementById("socialClientSelector");
+
+const socialTargetUserId = document.getElementById("socialTargetUserId");
+
+function socialUpdateClientSelector() {
+  if (!socialVisibilityClientOnly || !socialClientSelector) {
+    return;
+  }
+
+  if (socialVisibilityClientOnly.checked) {
+    socialClientSelector.style.display = "block";
+  } else {
+    socialClientSelector.style.display = "none";
+
+    if (socialTargetUserId) {
+      socialTargetUserId.value = "";
+    }
+  }
+}
+
+// When visibility changes
+document.querySelectorAll('input[name="visibility"]').forEach((radio) => {
+  radio.addEventListener("change", socialUpdateClientSelector);
+});
+
+// Initial state
+socialUpdateClientSelector();
+
+// ============================================================
+// POST BUTTON
+// ============================================================
 
 const socialPostCreateButton = socialPostCreateForm?.querySelector(
   'button[type="submit"], input[type="submit"]',
 );
 
+//
 let socialPostAttachments = [];
 
 let socialPostIsSubmitting = false;
@@ -210,7 +259,18 @@ const SOCIAL_ALLOWED_TYPES = [
   "image/gif",
   "video/mp4",
   "video/webm",
+  "audio/mpeg",
+  "audio/mp4",
+  "audio/wav",
+  "audio/ogg",
+  "audio/webm",
   "application/pdf",
+  "text/csv",
+  "application/csv",
+  "application/vnd.ms-excel",
+  "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+  "application/msword",
+  "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
 ];
 
 function socialAddPostAttachment(file) {
@@ -231,7 +291,9 @@ function socialAddPostAttachment(file) {
   }
 
   if (!SOCIAL_ALLOWED_TYPES.includes(file.type)) {
-    alert("Only JPG, PNG, WebP, GIF, MP4, WebM, and PDF files are allowed.");
+    alert(
+      "Only JPG, PNG, WebP, GIF, MP4, WebM, CSV, Excel, Word, and PDF files are allowed.",
+    );
 
     return false;
   }
@@ -569,13 +631,27 @@ if (!socialPostCreateForm) {
       const formData = new FormData();
 
       formData.append("content", content);
-
+      //
       const visibility = socialPostCreateForm.querySelector(
         'input[name="visibility"]:checked',
       );
 
-      formData.append("visibility", visibility?.value || "loggedin users");
+      const selectedVisibility = visibility?.value || "loggedin users";
 
+      formData.append("visibility", selectedVisibility);
+
+      if (selectedVisibility === "client_only") {
+        const targetClient = document.getElementById("socialTargetUserId");
+
+        const targetUserId = targetClient?.value || "";
+
+        if (!targetUserId) {
+          throw new Error("Please select a client.");
+        }
+
+        formData.append("target_user_id", targetUserId);
+      }
+      //
       socialPostAttachments.forEach((attachment, index) => {
         console.log("ADDING FILE TO FORM DATA:", {
           index,

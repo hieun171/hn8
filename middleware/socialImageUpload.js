@@ -10,10 +10,6 @@ if (!fs.existsSync(uploadDir)) {
   });
 }
 
-// ======================================================
-// MULTER STORAGE
-// ======================================================
-
 const storage = multer.diskStorage({
   destination: (req, file, cb) => {
     cb(null, uploadDir);
@@ -30,10 +26,6 @@ const storage = multer.diskStorage({
   },
 });
 
-// ======================================================
-// MULTER UPLOAD
-// ======================================================
-
 const socialFileUpload = multer({
   storage,
 
@@ -48,15 +40,26 @@ const socialFileUpload = multer({
       "image/png",
       "image/webp",
       "image/gif",
-      "video/webm",
       "video/mp4",
+      "video/webm",
+      "audio/mpeg",
+      "audio/mp4",
+      "audio/wav",
+      "audio/ogg",
+      "audio/webm",
       "application/pdf",
+      "text/csv",
+      "application/csv",
+      "application/vnd.ms-excel",
+      "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+      "application/msword",
+      "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
     ];
 
     if (!allowedTypes.includes(file.mimetype)) {
       return cb(
         new Error(
-          "Only JPG, PNG, WebP, GIF, WebM, MP4, and PDF files are allowed.",
+          "Only JPG, PNG, WebP, GIF, WebM, MP4, and PDF files,  CSV, Excel, and Word files are allowed.",
         ),
       );
     }

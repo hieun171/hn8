@@ -73,7 +73,7 @@
                 value="<%= q %>"
                 placeholder="Search post content..."
                 autocomplete="off"
-              >
+              > 
 
             </div> 
             <br>
@@ -205,7 +205,7 @@
                FULL  BREAKDOWN ONLY
           ======================================================= -->
 
-        <% if (totalPosts > 0) { %>
+       <% if (totalPosts > 0) { %>
 
   <div class="social-search-admin-breakdown">
 
@@ -221,20 +221,29 @@
 
     <span class="social-search-admin-only">
 
-      🔒 User + Hieu Nguyen, CPA only:
+      🔒 User + HieuNguyen, CPA only:
 
       <strong>
         <%= userAdminPosts %>
       </strong>
 
     </span>
-
+ 
     <span class="social-search-group-only">
 
-      👥 Group: 
+      👥 Group:
 
       <strong>
         <%= groupPosts %>
+      </strong>
+
+    </span>
+    <span class="social-search-client-only">
+
+      👥 Client Only:
+
+      <strong>
+        <%= clientOnlyPosts %>
       </strong>
 
     </span>
@@ -242,7 +251,6 @@
   </div>
 
 <% } %>
- 
 
 
           <!-- ======================================================
@@ -345,23 +353,33 @@
 
               <!-- VISIBILITY -->
 
-              <td>
+             <td>
 
-                <% if (post.visibility === "admin_only") { %>
+  <% if (post.visibility === "admin_only") { %>
 
-                  🔒 Admin Only
+    🔒 Admin Only
 
-                <% } else if (post.visibility === "group_only") { %>
+  <% } else if (post.visibility === "group_only") { %>
 
-                  👥 Group
+    👥 Group
 
-                <% } else { %>
+  <% } else if (post.visibility === "client_only") { %>
 
-                  👨‍👩‍👧‍👧 Loggedin Users
+    👤 Client Only
 
-                <% } %>
+  <% } else if (post.visibility === "loggedin users") { %>
 
-              </td>
+    👨‍👩‍👧‍👧 Loggedin Users
+
+  <% } else { %>
+
+    <span class="text-muted">
+      Unknown
+    </span>
+
+  <% } %>
+
+</td>
  
 
               <!-- PUBLIC -->
@@ -770,7 +788,29 @@
                     </span>
 
                   </label>
+<!-- ==================================================
+     SPECIFIC CLIENT
+     FULL ADMIN ONLY
+=================================================== -->
 
+<% if (isAdmin) { %>
+
+  <label class="social-admin-filter-radio">
+
+    <input
+      type="radio"
+      name="visibility"
+      value="client_only"
+      <%= visibility === "client_only" ? "checked" : "" %>
+    >
+
+    <span>
+      👤 Specific Client
+    </span>
+
+  </label>
+
+<% } %>
 
                 </div>
 

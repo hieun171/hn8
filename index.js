@@ -1574,6 +1574,12 @@ app.get("/social/post", ensureAuthenticated, async (req, res) => {
 
     const postId = req.query.postId ? parseInt(req.query.postId, 10) : null;
 
+    console.log("========================================");
+    console.log("SOCIAL GET");
+    console.log("userId:", userId);
+    console.log("userEmail:", userEmail);
+    console.log("postId:", postId);
+
     if (req.query.postId && !Number.isInteger(postId)) {
       return res.status(400).send("Invalid post ID.");
     }
@@ -1610,6 +1616,14 @@ app.get("/social/post", ensureAuthenticated, async (req, res) => {
 
     const emailsAdmin = normalizedRole === "admin";
 
+    console.log("SOCIAL userRole:", JSON.stringify(userRole));
+    console.log("SOCIAL userGroupId:", JSON.stringify(userGroupId));
+    console.log("SOCIAL isClient:", isClient);
+    console.log("SOCIAL isAdmin1:", isAdmin1);
+    console.log("SOCIAL isAdmin2:", isAdmin2);
+    console.log("SOCIAL isAdmin:", isAdmin);
+    console.log("SOCIAL emailsAdmin:", emailsAdmin);
+
     // ========================================================
     // PAGINATION
     // ========================================================
@@ -1621,6 +1635,10 @@ app.get("/social/post", ensureAuthenticated, async (req, res) => {
 
     let totalPosts = 0;
     let totalPages = 1;
+
+    // ========================================================
+    // COUNT FEED
+    // ========================================================
 
     if (!postId) {
       let totalPostsResult;
@@ -1636,11 +1654,21 @@ app.get("/social/post", ensureAuthenticated, async (req, res) => {
         totalPostsResult = await db.query(
           `
           SELECT COUNT(*)::INTEGER AS total
+
           FROM social_posts p
 
           WHERE
-            p.user_id = $1
-            AND p.visibility = 'admin_only'
+            (
+              p.user_id = $1
+              AND p.visibility = 'admin_only'
+            )
+
+            OR
+
+            (
+              p.visibility = 'client_only'
+              AND p.target_user_id = $1
+            )
           `,
           [userId],
         );
@@ -1707,7 +1735,17 @@ app.get("/social/post", ensureAuthenticated, async (req, res) => {
       }
     }
 
+    // ========================================================
+    // LOAD POSTS
+    // ========================================================
+
     let postsResult;
+
+    // ========================================================
+    // SINGLE POST
+    //
+    // /social/post?postId=26
+    // ========================================================
 
     if (postId) {
       postsResult = await db.query(
@@ -1718,8 +1756,10 @@ app.get("/social/post", ensureAuthenticated, async (req, res) => {
           p.content,
           p.color,
           p.visibility,
+          p.target_user_id,
           p.created_at,
           p.updated_at,
+
           u.email,
           u.group_id,
           u.role AS user_role
@@ -1747,13 +1787,31 @@ app.get("/social/post", ensureAuthenticated, async (req, res) => {
             -- =============================================
             -- CLIENT
             --
-            -- ONLY own admin_only post
+            -- Own admin_only post
+            --
+            -- OR
+            --
+            -- client_only post specifically targeted
+            -- to this client.
             -- =============================================
 
             (
               $6 = TRUE
-              AND p.user_id = $2
-              AND p.visibility = 'admin_only'
+
+              AND
+              (
+                (
+                  p.user_id = $2
+                  AND p.visibility = 'admin_only'
+                )
+
+                OR
+
+                (
+                  p.visibility = 'client_only'
+                  AND p.target_user_id = $2
+                )
+              )
             )
 
             OR
@@ -1761,12 +1819,14 @@ app.get("/social/post", ensureAuthenticated, async (req, res) => {
             -- =============================================
             -- ADMIN
             --
+            -- role = admin
+            --
             -- Own posts
             -- loggedin users
-            -- ALL group_only posts
+            -- group_only
             --
-            -- Never client posts
-            -- Never another user's admin_only
+            -- No client posts.
+            -- No client_only posts.
             -- =============================================
 
             (
@@ -1793,7 +1853,8 @@ app.get("/social/post", ensureAuthenticated, async (req, res) => {
             -- Own group posts
             -- loggedin users
             --
-            -- Never client posts
+            -- No client posts.
+            -- No client_only posts.
             -- =============================================
 
             (
@@ -1823,10 +1884,21 @@ app.get("/social/post", ensureAuthenticated, async (req, res) => {
         [postId, userId, isAdmin, emailsAdmin, userGroupId, isClient],
       );
 
+      console.log("SINGLE POST RESULT:", postsResult.rows);
+      //
       if (!postsResult.rowCount) {
         return res.status(404).send("Post not found.");
       }
-    } else if (isAdmin) {
+    }
+
+    // ========================================================
+    // ADMIN1 / ADMIN2 FEED
+    //
+    // FULL ACCESS
+    //
+    // Can see ALL posts, including client_only.
+    // ========================================================
+    else if (isAdmin) {
       postsResult = await db.query(
         `
         SELECT
@@ -1835,8 +1907,10 @@ app.get("/social/post", ensureAuthenticated, async (req, res) => {
           p.content,
           p.color,
           p.visibility,
+          p.target_user_id,
           p.created_at,
           p.updated_at,
+
           u.email,
           u.group_id,
           u.role AS user_role
@@ -1855,7 +1929,19 @@ app.get("/social/post", ensureAuthenticated, async (req, res) => {
         `,
         [limit, offset],
       );
-    } else if (isClient) {
+    }
+
+    // ========================================================
+    // CLIENT FEED
+    //
+    // Can see:
+    //
+    // 1. Own admin_only posts
+    //
+    // 2. client_only posts specifically targeted
+    //    to this client.
+    // ========================================================
+    else if (isClient) {
       postsResult = await db.query(
         `
         SELECT
@@ -1864,8 +1950,10 @@ app.get("/social/post", ensureAuthenticated, async (req, res) => {
           p.content,
           p.color,
           p.visibility,
+          p.target_user_id,
           p.created_at,
           p.updated_at,
+
           u.email,
           u.group_id,
           u.role AS user_role
@@ -1876,8 +1964,17 @@ app.get("/social/post", ensureAuthenticated, async (req, res) => {
           ON u.id = p.user_id
 
         WHERE
-          p.user_id = $1
-          AND p.visibility = 'admin_only'
+          (
+            p.user_id = $1
+            AND p.visibility = 'admin_only'
+          )
+
+          OR
+
+          (
+            p.visibility = 'client_only'
+            AND p.target_user_id = $1
+          )
 
         ORDER BY
           p.created_at DESC,
@@ -1888,7 +1985,23 @@ app.get("/social/post", ensureAuthenticated, async (req, res) => {
         `,
         [userId, limit, offset],
       );
-    } else if (emailsAdmin) {
+    }
+
+    // ========================================================
+    // ADMIN FEED
+    //
+    // role = admin
+    //
+    // Can see:
+    //   - own posts
+    //   - all group_only posts
+    //   - loggedin users posts
+    //
+    // Cannot see:
+    //   - client posts
+    //   - client_only posts
+    // ========================================================
+    else if (emailsAdmin) {
       postsResult = await db.query(
         `
         SELECT
@@ -1897,8 +2010,10 @@ app.get("/social/post", ensureAuthenticated, async (req, res) => {
           p.content,
           p.color,
           p.visibility,
+          p.target_user_id,
           p.created_at,
           p.updated_at,
+
           u.email,
           u.group_id,
           u.role AS user_role
@@ -1929,7 +2044,21 @@ app.get("/social/post", ensureAuthenticated, async (req, res) => {
         `,
         [userId, limit, offset],
       );
-    } else {
+    }
+
+    // ========================================================
+    // NORMAL NON-CLIENT USER FEED
+    //
+    // Can see:
+    //   - own posts
+    //   - own group posts
+    //   - loggedin users posts
+    //
+    // Cannot see:
+    //   - client posts
+    //   - client_only posts
+    // ========================================================
+    else {
       postsResult = await db.query(
         `
         SELECT
@@ -1938,8 +2067,10 @@ app.get("/social/post", ensureAuthenticated, async (req, res) => {
           p.content,
           p.color,
           p.visibility,
+          p.target_user_id,
           p.created_at,
           p.updated_at,
+
           u.email,
           u.group_id,
           u.role AS user_role
@@ -1976,6 +2107,10 @@ app.get("/social/post", ensureAuthenticated, async (req, res) => {
       );
     }
 
+    // ========================================================
+    // POST MEDIA
+    // ========================================================
+
     const mediaResult = await db.query(`
       SELECT
         id,
@@ -1994,6 +2129,8 @@ app.get("/social/post", ensureAuthenticated, async (req, res) => {
         created_at ASC,
         id ASC
     `);
+
+    console.log("SOCIAL MEDIA COUNT:", mediaResult.rows.length);
 
     // ========================================================
     // MEDIA LOOKUP
@@ -2018,6 +2155,10 @@ app.get("/social/post", ensureAuthenticated, async (req, res) => {
         createdAt: row.created_at,
       });
     }
+
+    // ========================================================
+    // COMMENTS
+    // ========================================================
 
     const commentsResult = await db.query(`
       SELECT
@@ -2236,6 +2377,10 @@ app.get("/social/post", ensureAuthenticated, async (req, res) => {
       color: row.color,
       visibility: row.visibility,
 
+      // NEW:
+      // Client targeted by client_only post.
+      targetUserId: row.target_user_id,
+
       media: mediaByPost[row.id] || [],
 
       createdAt: row.created_at,
@@ -2269,6 +2414,33 @@ app.get("/social/post", ensureAuthenticated, async (req, res) => {
     const profile = profileResult.rows[0] || null;
 
     // ========================================================
+    // CLIENT LIST
+    //
+    // Used by Admin1/Admin2 for:
+    // 🎯 Post to Client
+    //
+    // id = my_user.id
+    // email = client's email
+    // ========================================================
+
+    let clients = [];
+
+    if (isAdmin) {
+      const clientsResult = await db.query(
+        `
+        SELECT
+          id,
+          email
+        FROM my_user
+        WHERE role = 'client'
+        ORDER BY email ASC
+        `,
+      );
+
+      clients = clientsResult.rows;
+    }
+
+    // ========================================================
     // RENDER
     // ========================================================
 
@@ -2289,6 +2461,9 @@ app.get("/social/post", ensureAuthenticated, async (req, res) => {
 
       isEmailsAdmin: emailsAdmin,
 
+      // Admin1/Admin2 client dropdown
+      clients,
+
       defaultDate: getToday(),
 
       page,
@@ -2307,6 +2482,7 @@ app.get("/social/post", ensureAuthenticated, async (req, res) => {
     return res.status(500).send(`Unable to load social feed: ${err.message}`);
   }
 });
+
 //
 
 // socialFileUpload handle upload and pasted from multer
@@ -2347,6 +2523,52 @@ app.post(
       const content = String(req.body.content || "").trim();
 
       const files = req.files || [];
+      //
+      const allowedMimeTypes = [
+        // Images
+        "image/jpeg",
+        "image/png",
+        "image/webp",
+        "image/gif",
+
+        // Video
+        "video/mp4",
+        "video/webm",
+
+        // Audio
+        "audio/mpeg",
+        "audio/mp4",
+        "audio/wav",
+        "audio/ogg",
+        "audio/webm",
+
+        // PDF
+        "application/pdf",
+
+        // CSV
+        "text/csv",
+        "application/csv",
+
+        // Excel
+        "application/vnd.ms-excel",
+        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+
+        // Word
+        "application/msword",
+        "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+      ];
+
+      const invalidFiles = files.filter(
+        (file) => !allowedMimeTypes.includes(file.mimetype),
+      );
+
+      if (invalidFiles.length > 0) {
+        return res.status(400).json({
+          success: false,
+          error: "One or more uploaded file types are not supported.",
+        });
+      }
+      //
 
       const MAX_FILES = 10;
       const MAX_TOTAL_SIZE = 100 * 1024 * 1024;
@@ -2400,6 +2622,10 @@ app.post(
       if (!Array.isArray(mediaTexts)) {
         mediaTexts = [mediaTexts];
       }
+      //
+      // ======================================================
+      // VISIBILITY
+      // ======================================================
 
       const requestedVisibility = String(
         req.body.visibility || "loggedin users",
@@ -2409,16 +2635,77 @@ app.post(
 
       let visibility = "loggedin users";
 
+      let targetUserId = null;
+
+      const isAdmin1 = userRole === "admin1";
+      const isAdmin2 = userRole === "admin2";
+      const isFullAdmin = isAdmin1 || isAdmin2;
+
       if (userRole === "client") {
         visibility = "admin_only";
+        targetUserId = null;
+      } else if (isFullAdmin) {
+        if (
+          requestedVisibility === "loggedin users" ||
+          requestedVisibility === "group_only" ||
+          requestedVisibility === "admin_only"
+        ) {
+          visibility = requestedVisibility;
+          targetUserId = null;
+        } else if (requestedVisibility === "client_only") {
+          visibility = "client_only";
+
+          const selectedClientId = parseInt(req.body.target_user_id, 10);
+
+          if (!Number.isInteger(selectedClientId)) {
+            return res.status(400).json({
+              success: false,
+              error: "Please select a client.",
+            });
+          }
+
+          const targetClientResult = await client.query(
+            `
+            SELECT
+              id,
+              email
+            FROM my_user
+            WHERE id = $1
+                AND LOWER(TRIM(role)) = 'client'
+            LIMIT 1
+            `,
+            [selectedClientId],
+          );
+
+          if (!targetClientResult.rowCount) {
+            return res.status(400).json({
+              success: false,
+              error: "Selected client was not found.",
+            });
+          }
+
+          targetUserId = targetClientResult.rows[0].id;
+        } else {
+          return res.status(400).json({
+            success: false,
+            error: "Invalid post visibility.",
+          });
+        }
       } else if (
         requestedVisibility === "loggedin users" ||
         requestedVisibility === "group_only" ||
         requestedVisibility === "admin_only"
       ) {
         visibility = requestedVisibility;
+        targetUserId = null;
+      } else {
+        return res.status(400).json({
+          success: false,
+          error: "Invalid post visibility.",
+        });
       }
 
+      //
       const color = colors[Math.floor(Math.random() * colors.length)];
 
       // ======================================================
@@ -2435,12 +2722,8 @@ app.post(
       await fs.promises.mkdir(thumbnailDir, {
         recursive: true,
       });
-
+      //
       await client.query("BEGIN");
-
-      // ======================================================
-      // CREATE POST
-      // ======================================================
 
       const postResult = await client.query(
         `
@@ -2449,13 +2732,14 @@ app.post(
           user_id,
           content,
           color,
-          visibility
+          visibility,
+          target_user_id
         )
         VALUES
-        ($1, $2, $3, $4)
+        ($1, $2, $3, $4, $5)
         RETURNING id
         `,
-        [userId, content, color, visibility],
+        [userId, content, color, visibility, targetUserId],
       );
 
       const postId = postResult.rows[0].id;
@@ -4641,20 +4925,12 @@ app.post("/social/post/share", ensureAuthenticated, async (req, res) => {
 //SOCIAL search
 app.get("/social/search", ensureAuthenticated, async (req, res) => {
   try {
-    // ========================================================
-    // CURRENT USER
-    // ========================================================
-
     const userId = req.user?.id || null;
     const userEmail = req.user?.email || null;
 
     if (!userId) {
       return res.status(401).send("Please log in.");
     }
-
-    // ========================================================
-    // CURRENT USER ROLE + GROUP
-    // ========================================================
 
     const userResult = await db.query(
       `
@@ -4676,82 +4952,34 @@ app.get("/social/search", ensureAuthenticated, async (req, res) => {
 
     const isClient = normalizedRole === "client";
 
-    // ========================================================
-    // ADMIN ROLES
-    //
-    // admin1 / admin2 = FULL ACCESS
-    //
-    // admin = LIMITED ADMIN
-    // ========================================================
-
     const isAdmin1 = normalizedRole === "admin1";
     const isAdmin2 = normalizedRole === "admin2";
 
     const isAdmin = isAdmin1 || isAdmin2;
 
-    // ========================================================
-    // ADMIN COMPATIBILITY VARIABLE
-    //
-    // Keep isEmailsAdmin because social-search.ejs may use it.
-    //
-    // role = admin means LIMITED ADMIN.
-    // ========================================================
-
     const userIsCloseRelative = normalizedRole === "admin";
 
     const userIsEmailsAdmin = userIsCloseRelative;
 
-    // ========================================================
-    // FULL ADMIN ACCESS
-    //
-    // admin1 / admin2 only
-    // ========================================================
-
     const hasFullAdminAccess = isAdmin;
-
-    // ========================================================
-    // SEARCH INPUT
-    // ========================================================
 
     const q = (req.query.q || "").trim();
     const user = (req.query.user || "").trim();
-
-    // ========================================================
-    // FILTER INPUT
-    // ========================================================
 
     let visibility = "";
 
     let dateFrom = (req.query.dateFrom || "").trim();
     let dateTo = (req.query.dateTo || "").trim();
 
-    // ========================================================
-    // VISIBILITY FILTER
-    //
-    // ADMIN1 / ADMIN2:
-    //   loggedin users
-    //   group_only
-    //   admin_only
-    //
-    // ADMIN:
-    //   loggedin users
-    //   group_only
-    //   admin_only filter is NOT allowed because admin cannot
-    //   see another user's admin_only post.
-    //
-    // CLIENT:
-    //   admin_only only
-    //
-    // NORMAL USER:
-    //   loggedin users
-    //   group_only
-    //   admin_only is NOT allowed.
-    // ========================================================
-
     if (hasFullAdminAccess) {
       visibility = (req.query.visibility || "").trim();
 
-      const allowedVisibility = ["loggedin users", "group_only", "admin_only"];
+      const allowedVisibility = [
+        "loggedin users",
+        "group_only",
+        "admin_only",
+        "client_only",
+      ];
 
       if (!allowedVisibility.includes(visibility)) {
         visibility = "";
@@ -4823,62 +5051,31 @@ app.get("/social/search", ensureAuthenticated, async (req, res) => {
     const conditions = [];
     const values = [];
 
-    // ========================================================
-    // CLIENT
     //
-    // CLIENT:
-    //   - only own posts
-    //   - only admin_only
-    //
-    // This also means:
-    //   - no other client
-    //   - no other user
-    //   - no group posts
-    //   - no loggedin users posts
-    // ========================================================
-
     if (isClient && !hasFullAdminAccess) {
       values.push(userId);
 
       const clientUserParam = values.length;
 
       conditions.push(`
+    (
+      (
         p.user_id = $${clientUserParam}
-      `);
+        AND p.visibility = 'admin_only'
+      )
 
-      conditions.push(`
-        p.visibility = 'admin_only'
-      `);
-    }
+      OR
 
-    // ========================================================
-    // ADMIN1 / ADMIN2
-    //
-    // FULL ACCESS.
-    //
-    // No ownership/group/client restriction.
-    // They can search all posts.
-    // ========================================================
-    else if (hasFullAdminAccess) {
+      (
+        p.visibility = 'client_only'
+        AND p.target_user_id = $${clientUserParam}
+      )
+    )
+  `);
+    } else if (hasFullAdminAccess) {
       // No security restriction here.
       // Visibility/date/content/user filters are added below.
-    }
-
-    // ========================================================
-    // ADMIN
-    //
-    // LIMITED ADMIN.
-    //
-    // Can see:
-    //   - own posts
-    //   - ALL group_only posts from ALL groups
-    //   - loggedin users posts
-    //
-    // Cannot see:
-    //   - ANY client-owned posts
-    //   - another user's admin_only posts
-    // ========================================================
-    else if (userIsCloseRelative) {
+    } else if (userIsCloseRelative) {
       conditions.push(`
         COALESCE(LOWER(TRIM(u.role)), '') <> 'client'
       `);
@@ -4896,23 +5093,7 @@ app.get("/social/search", ensureAuthenticated, async (req, res) => {
           OR p.visibility = 'group_only'
         )
       `);
-    }
-
-    // ========================================================
-    // ALL OTHER USERS
-    //
-    // NULL / BLANK / OTHER NON-CLIENT ROLE
-    //
-    // Can see:
-    //   - own posts
-    //   - own group posts
-    //   - loggedin users posts
-    //
-    // Cannot see:
-    //   - client posts
-    //   - another user's admin_only posts
-    // ========================================================
-    else {
+    } else {
       conditions.push(`
         COALESCE(LOWER(TRIM(u.role)), '') <> 'client'
       `);
@@ -4939,10 +5120,6 @@ app.get("/social/search", ensureAuthenticated, async (req, res) => {
         )
       `);
     }
-
-    // ========================================================
-    // VISIBILITY FILTER
-    // ========================================================
 
     if (visibility) {
       values.push(visibility);
@@ -4988,22 +5165,6 @@ app.get("/social/search", ensureAuthenticated, async (req, res) => {
       `);
     }
 
-    // ========================================================
-    // USER / EMAIL SEARCH
-    //
-    // IMPORTANT:
-    // This is applied AFTER the security conditions above.
-    //
-    // Therefore:
-    // A normal user searching for a client email still gets
-    // ZERO client posts.
-    //
-    // A limited admin searching for a client email also gets
-    // ZERO client posts.
-    //
-    // Admin1/admin2 can search client posts.
-    // ========================================================
-
     if (user) {
       values.push(`%${user}%`);
 
@@ -5041,45 +5202,41 @@ app.get("/social/search", ensureAuthenticated, async (req, res) => {
 
     const totalPosts = Number(totalResult.rows[0]?.total) || 0;
 
-    // ========================================================
-    // VISIBILITY BREAKDOWN
-    //
-    // Uses EXACT SAME security WHERE clause.
-    //
-    // Therefore breakdown only contains posts the current
-    // user is allowed to see.
-    // ========================================================
-
     let totalBreakdownPosts = 0;
     let everyonePosts = 0;
     let userAdminPosts = 0;
     let groupPosts = 0;
+    let clientOnlyPosts = 0;
 
     const breakdownResult = await db.query(
       `
-      SELECT
+  SELECT
 
-        COUNT(*)::INTEGER AS total_posts,
+    COUNT(*)::INTEGER AS total_posts,
 
-        COUNT(*) FILTER (
-          WHERE p.visibility = 'loggedin users'
-        )::INTEGER AS everyone_posts,
+    COUNT(*) FILTER (
+      WHERE p.visibility = 'loggedin users'
+    )::INTEGER AS everyone_posts,
 
-        COUNT(*) FILTER (
-          WHERE p.visibility = 'admin_only'
-        )::INTEGER AS user_admin_posts,
+    COUNT(*) FILTER (
+      WHERE p.visibility = 'admin_only'
+    )::INTEGER AS user_admin_posts,
 
-        COUNT(*) FILTER (
-          WHERE p.visibility = 'group_only'
-        )::INTEGER AS group_posts
+    COUNT(*) FILTER (
+      WHERE p.visibility = 'group_only'
+    )::INTEGER AS group_posts,
 
-      FROM social_posts p
+    COUNT(*) FILTER (
+      WHERE p.visibility = 'client_only'
+    )::INTEGER AS client_only_posts
 
-      JOIN my_user u
-        ON u.id = p.user_id
+  FROM social_posts p
 
-      ${whereClause}
-      `,
+  JOIN my_user u
+    ON u.id = p.user_id
+
+  ${whereClause}
+  `,
       values,
     );
 
@@ -5090,6 +5247,7 @@ app.get("/social/search", ensureAuthenticated, async (req, res) => {
     userAdminPosts = Number(breakdownResult.rows[0]?.user_admin_posts) || 0;
 
     groupPosts = Number(breakdownResult.rows[0]?.group_posts) || 0;
+    clientOnlyPosts = Number(breakdownResult.rows[0]?.client_only_posts) || 0;
 
     // ========================================================
     // TOTAL PAGES
@@ -5129,10 +5287,6 @@ app.get("/social/search", ensureAuthenticated, async (req, res) => {
       return res.redirect(`/social/search?${params.toString()}`);
     }
 
-    // ========================================================
-    // SEARCH RESULTS
-    // ========================================================
-
     const limitParam = values.length + 1;
     const offsetParam = values.length + 2;
 
@@ -5144,6 +5298,7 @@ app.get("/social/search", ensureAuthenticated, async (req, res) => {
         p.content,
         p.color,
         p.visibility,
+          p.target_user_id,
         p.public_enabled,
         p.public_reactions_enabled,
         p.created_at,
@@ -5187,6 +5342,7 @@ app.get("/social/search", ensureAuthenticated, async (req, res) => {
       color: row.color,
 
       visibility: row.visibility,
+      targetUserId: row.target_user_id,
 
       publicEnabled: row.public_enabled,
 
@@ -5247,6 +5403,7 @@ app.get("/social/search", ensureAuthenticated, async (req, res) => {
       everyonePosts,
       userAdminPosts,
       groupPosts,
+      clientOnlyPosts,
 
       totalPages,
     });
@@ -5256,6 +5413,7 @@ app.get("/social/search", ensureAuthenticated, async (req, res) => {
     return res.status(500).send("Unable to search social posts.");
   }
 });
+
 // ============================================================
 // SOCIAL SEARCH
 //

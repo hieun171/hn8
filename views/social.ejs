@@ -23,7 +23,7 @@
     <strong>Name:</strong>
     <%= currentUserEmail %>
   </div>
-
+ 
   <% if (profile) { %>
 
     <% if (profile.emailpr && profile.emailpr.trim() !== '') { %>
@@ -37,7 +37,7 @@
         <strong>Phone:</strong> <%= profile.phone %>
       </div>
     <% } %>
-
+ 
   <% } %> 
 </div>
   <!-- Profile -->
@@ -172,7 +172,7 @@
 <div class="social-file-upload">
 
  <label for="socialPostFiles">
-  📎 Add images, video, or PDF
+  📎 Add images, video, PDF, or CSV Excel
 </label>
 
 <input
@@ -184,9 +184,26 @@
     image/png,
     image/webp,
     image/gif,
+
     video/mp4,
     video/webm,
-    application/pdf
+
+    audio/mpeg,
+    audio/mp4,
+    audio/wav,
+    audio/ogg,
+    audio/webm,
+
+    application/pdf,
+
+    text/csv,
+    application/csv,
+
+    application/vnd.ms-excel,
+    application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,
+
+    application/msword,
+    application/vnd.openxmlformats-officedocument.wordprocessingml.document
   "
   multiple
 > 
@@ -194,13 +211,17 @@
   <div id="socialPostFilesPreview"></div>
 
 </div>
- 
+  
   <!-- VISIBILITY -->
 <div class="social-visibility-options">
 
   <% if (isClient) { %>
 
-    <!-- CLIENT: ONLY ADMIN-ONLY -->
+    <!-- =====================================================
+         CLIENT
+         Client can ONLY create admin_only posts
+    ====================================================== -->
+
     <label>
       <input
         type="radio"
@@ -213,7 +234,10 @@
 
   <% } else { %>
 
-    <!-- NON-CLIENT: ALL 3 OPTIONS -->
+    <!-- =====================================================
+         ALL NON-CLIENT USERS
+         Normal 3 visibility options
+    ====================================================== -->
 
     <label>
       <input
@@ -222,16 +246,20 @@
         value="loggedin users"
         checked
       >
-      <span>👨‍👩‍👧‍👧👩‍👩‍👧‍👦 All Loggedin Users 👨‍👩‍👧‍👧👩‍👩‍👧‍👦</span>
+      <span>
+        👨‍👩‍👧‍👧 All Loggedin Users
+      </span>
     </label>
 
-    <label> 
+    <label>
       <input
         type="radio"
         name="visibility"
         value="group_only"
       >
-      <span>👥 My Group 👥</span>
+      <span>
+        👥 My Group
+      </span>
     </label>
 
     <label>
@@ -240,12 +268,65 @@
         name="visibility"
         value="admin_only"
       >
-      <span>🔒 Admin Only 🔒</span>
+      <span>
+        🔒 Admin Only
+      </span>
     </label>
 
-  <% } %>
+    <!-- =====================================================
+         ADMIN1 / ADMIN2 ONLY
+         Can post to one selected client
+    ====================================================== -->
  
+    <% if (isAdmin) { %>
+
+      <label>
+        <input
+          type="radio"
+          name="visibility"
+          value="client_only"
+          id="socialVisibilityClientOnly"
+        >
+        <span>
+          👤 Specific Client Only
+        </span>
+      </label>
+
+      <div
+        id="socialClientSelector"
+        style="display:none; margin-top:10px;"
+      >
+
+        <label for="socialTargetUserId">
+          Select Client:
+        </label>
+
+        <select
+          name="target_user_id"
+          id="socialTargetUserId"
+        > 
+          <option value="">
+            -- Select Client --
+          </option>
+
+          <% (clients || []).forEach(client => { %>
+
+            <option value="<%= client.id %>">
+              <%= client.email %>
+            </option>
+
+          <% }) %>
+
+        </select>
+
+      </div> 
+
+    <% } %>
+
+  <% } %>
+
 </div>
+
 
  <!-- VISIBILITY -->
   <div class="social-create-post-footer">
@@ -397,7 +478,7 @@
           </button>
 
         </div>
-
+ 
       </form>
 
     </details>
@@ -408,7 +489,7 @@
       action="/social/post/delete"
       method="POST"
       onsubmit="return confirm('Delete this post?');"
-    >
+    > 
 
       <input
         type="hidden"
@@ -506,7 +587,7 @@
       src="<%= file.fileUrl %>"
       type="<%= file.mimeType %>"
     >
-
+ 
     Your browser does not support video playback.
   </video>
         <% } else if (
