@@ -2993,7 +2993,7 @@ app.get("/notification", ensureAuthenticated, async (req, res) => {
       .trim()
       .toLowerCase();
 
-    const hasAdmin2Access = userRole === "admin2";
+    const hasAdmin2Access = userRole === "admin1";
 
     if (!hasAdmin2Access) {
       return res.status(403).send("Access denied.");
