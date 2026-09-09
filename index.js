@@ -2977,7 +2977,7 @@ app.get("/notification", ensureAuthenticated, async (req, res) => {
     }
 
     // ========================================================
-    // ADMIN2 ONLY
+    // ADMIN1 ONLY
     // ========================================================
 
     const roleResult = await db.query(
@@ -2993,9 +2993,9 @@ app.get("/notification", ensureAuthenticated, async (req, res) => {
       .trim()
       .toLowerCase();
 
-    const hasAdmin2Access = userRole === "admin1";
+    const hasAdmin1Access = userRole === "admin1";
 
-    if (!hasAdmin2Access) {
+    if (!hasAdmin1Access) {
       return res.status(403).send("Access denied.");
     }
 
